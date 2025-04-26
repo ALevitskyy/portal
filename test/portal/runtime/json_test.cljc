@@ -38,3 +38,11 @@
         json/read
         meta))
    "Metadata on vega-lite is lost when converting to JSON and back"))
+
+(deftest test-string-key-conversion
+  (is
+   (= {:foo "bar"}
+      (-> {"foo" "bar"}
+          json/write
+          json/read))
+   "String keys do not become keywords"))

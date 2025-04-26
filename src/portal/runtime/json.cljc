@@ -78,6 +78,20 @@
        node))
    x))
 
+(defn str-keys->keywords [x]
+  (walk/postwalk
+   (fn [node]
+     (if (map? node)
+       (reduce-kv
+        (fn [m k v]
+          (if (string? k)
+            (assoc m (keyword k) v)
+            (assoc m k v)))
+        {}
+        node)
+       node))
+   x))
+
 (defn write-raw [value]
   #?(:bb   (json/generate-string value)
      :clj  (json/write-str value)
@@ -111,10 +125,12 @@
    (-> string
        (read-raw opts)
        decode-keywords
+       str-keys->keywords ; important to do it before decode-metadata, since it erases metadata
        decode-metadata)))
 
 (defn read-stream [stream]
   (-> stream
       read-stream-raw
       decode-keywords
+      str-keys->keywords
       decode-metadata))
