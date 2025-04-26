@@ -23,6 +23,18 @@
     (meta line-chart)
     (-> line-chart
         json/encode-metadata
+        json/encode-keywords
+        json/decode-keywords
         json/decode-metadata
+        meta))
+   "Metadata on vega-lite is lost when converting to JSON and back"))
+
+(deftest test-preserve-metadata-json
+  (is
+   (=
+    (meta line-chart)
+    (-> line-chart
+        json/write
+        json/read
         meta))
    "Metadata on vega-lite is lost when converting to JSON and back"))

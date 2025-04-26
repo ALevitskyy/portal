@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [read])
   #?(:bb   (:require [cheshire.core :as json]
                      [clojure.walk :as walk])
+
      :clj  (:require [clojure.data.json :as json]
                      [clojure.walk :as walk])
      :cljr (:require [portal.runtime.clr.assembly]
@@ -11,8 +12,37 @@
 
 (def meta-key :portal.runtime.json/meta__)
 (def data-key :portal.runtime.json/data__)
+(def keyword-key "__portal__runtime__json__keyword__")
+
 (defn preserve-ns-key-fn [key]
   (subs  (str key) 1))
+
+(defn starts-with? [s prefix]
+  (let [prefix-len (count prefix)]
+    (and (>= (count s) prefix-len)
+         (= (subs s 0 prefix-len) prefix))))
+
+(defn remove-keyword-key [x]
+  (subs (str x) (count keyword-key)))
+
+(defn encode-keywords [x]
+  (walk/postwalk
+   (fn [node]
+     (if (keyword? node)
+       (str keyword-key (preserve-ns-key-fn node))
+       node))
+   x))
+
+(defn decode-keywords [x]
+  (walk/postwalk
+   (fn [node]
+     (if (and
+          (string? node)
+          (starts-with? node keyword-key))
+
+       (keyword (remove-keyword-key node))
+       node))
+   x))
 
 (defn encode-metadata
   "Recursively encodes metadata in a Clojure object.
@@ -49,35 +79,42 @@
    x))
 
 (defn write-raw [value]
-  #?(:bb   (json/generate-string value {:key-fn preserve-ns-key-fn})
-     :clj  (json/write-str value {:key-fn preserve-ns-key-fn})
-     :cljr (json/write-str value {:key-fn preserve-ns-key-fn})
-     :cljs (.stringify js/JSON (clj->js value {:keyword-fn preserve-ns-key-fn}))))
+  #?(:bb   (json/generate-string value)
+     :clj  (json/write-str value)
+     :cljr (json/write-str value)
+     :cljs (.stringify js/JSON (clj->js value))))
 
 (defn read-raw
   ([string]
-   (read-raw string {:key-fn keyword}))
+   (read-raw string {}))
   ([string opts]
-   #?(:bb   (json/parse-string string (:key-fn opts))
-      :clj  (json/read-str string :key-fn (:key-fn opts))
-      :cljr (json/read-str string :key-fn (:key-fn opts))
-      :cljs (js->clj (.parse js/JSON string)
-                     :keywordize-keys
-                     (= keyword (:key-fn opts))))))
+   #?(:bb   (json/parse-string string)
+      :clj  (json/read-str string)
+      :cljr (json/read-str string)
+      :cljs (js->clj (.parse js/JSON string)))))
 
 (defn read-stream-raw [stream]
-  #?(:bb   (json/parse-stream stream keyword)
-     :clj  (json/read stream :key-fn keyword)
+  #?(:bb   (json/parse-stream stream)
+     :clj  (json/read stream)
      :cljs (throw (ex-info "Unsupported in cljs" {:stream stream}))))
 
 (defn write [value]
-  (write-raw (encode-metadata value)))
+  (-> value
+      encode-metadata
+      encode-keywords
+      write-raw))
 
 (defn read
   ([string]
-   (read string {:key-fn keyword}))
+   (read string {}))
   ([string opts]
-   (decode-metadata (read-raw string opts))))
+   (-> string
+       (read-raw opts)
+       decode-keywords
+       decode-metadata)))
 
 (defn read-stream [stream]
-  (decode-metadata (read-stream-raw stream)))
+  (-> stream
+      read-stream-raw
+      decode-keywords
+      decode-metadata))
